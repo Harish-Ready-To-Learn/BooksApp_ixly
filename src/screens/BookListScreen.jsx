@@ -11,11 +11,11 @@ import {
   TouchableOpacity,
   Modal,
 } from 'react-native';
-import {fetchBooks} from '../api/booksApi';
+import {getBooksList} from '../api/booksApi';
 import {CATEGORIES} from '../utils/data';
 import useDebounce from '../hooks/useDebounce';
-
-const {width} = Dimensions.get('window'); // Get screen width
+import ScreenWrapper from '../components/ScreenWrapper';
+import BookListItem from '../components/BookListItem';
 
 const BookListScreen = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,8 +31,9 @@ const BookListScreen = () => {
     const getBooks = async () => {
       setLoading(true);
       try {
-        const data = await fetchBooks(debouncedSearchTerm, selectedCategory);
-        setBooks(data.items || []);
+        const data = await getBooksList('', selectedCategory);
+        console.log(data);
+        setBooks(data.docs || []);
       } catch (error) {
         console.error(error);
       }
@@ -40,79 +41,85 @@ const BookListScreen = () => {
     };
 
     getBooks();
-  }, [debouncedSearchTerm, selectedCategory]);
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    const getBooks = async () => {
+      setLoading(true);
+      try {
+        const data = await getBooksList(debouncedSearchTerm, '');
+        console.log(data);
+        setBooks(data.docs || []);
+      } catch (error) {
+        console.error(error);
+      }
+      setLoading(false);
+    };
+
+    getBooks();
+  }, [debouncedSearchTerm]);
 
   const handleCategorySelect = category => {
     setSelectedCategory(category);
+    setSearchTerm('');
     setFilterVisible(false); // Close modal after selection
   };
 
   return (
-    <View style={{flex: 1, padding: 20}}>
-      <View style={styles.searchContainer}>
-        <TextInput
-          placeholder="Search books..."
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          style={styles.input}
-        />
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setFilterVisible(true)}>
-          <Text style={styles.filterText}>Filter</Text>
-        </TouchableOpacity>
-      </View>
-
-      {loading ? (
-        <ActivityIndicator size="large" />
-      ) : (
-        <FlatList
-          data={books}
-          keyExtractor={item => item.id}
-          renderItem={({item}) => {
-            const {title, imageLinks} = item.volumeInfo;
-            const imageUrl =
-              imageLinks?.thumbnail || 'https://via.placeholder.com/400x600';
-
-            return (
-              <View style={styles.bookItem}>
-                <Image source={{uri: imageUrl}} style={styles.bookImage} />
-                <View style={styles.overlay}>
-                  <Text style={styles.bookTitle} numberOfLines={2}>
-                    {title}
-                  </Text>
-                </View>
-              </View>
-            );
-          }}
-        />
-      )}
-      {/* Filter Modal */}
-      <Modal visible={filterVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Category</Text>
-            {CATEGORIES.map(cat => (
-              <TouchableOpacity
-                key={cat.categoryValue}
-                style={[
-                  styles.categoryButton,
-                  selectedCategory === cat.categoryValue &&
-                    styles.selectedCategory,
-                ]}
-                onPress={() => handleCategorySelect(cat.categoryValue)}>
-                <Text style={styles.categoryText}>{cat.categoryName}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setFilterVisible(false)}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
+    <ScreenWrapper>
+      <View style={{flex: 1, paddingHorizontal: 20}}>
+        <View style={styles.searchContainer}>
+          <TextInput
+            placeholder="Search books..."
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+            style={styles.input}
+          />
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setFilterVisible(true)}>
+            <Text style={styles.filterText}>Filter</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
-    </View>
+
+        {loading ? (
+          <ActivityIndicator size="large" />
+        ) : (
+          <FlatList
+            data={books}
+            keyExtractor={item => item.key}
+            renderItem={({item}) => {
+              return <BookListItem item={item} />;
+            }}
+          />
+        )}
+        {/* Filter Modal */}
+        <Modal visible={filterVisible} transparent animationType="slide">
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              {CATEGORIES.map(cat => (
+                <TouchableOpacity
+                  key={cat.categoryValue}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === cat.categoryValue &&
+                      styles.selectedCategory,
+                  ]}
+                  onPress={() => handleCategorySelect(cat.categoryValue)}>
+                  <Text style={styles.categoryText}>{cat.categoryName}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setFilterVisible(false)}>
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </ScreenWrapper>
   );
 };
 
@@ -127,12 +134,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     margin: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
+    gap: 10,
     overflow: 'hidden',
   },
   input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
     flex: 1,
     padding: 12,
     fontSize: 16,
@@ -141,33 +149,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#007bff',
     paddingVertical: 12,
     paddingHorizontal: 20,
+    borderRadius: 8,
   },
   filterText: {
     color: '#fff',
     fontWeight: 'bold',
   },
-  bookItem: {
-    position: 'relative',
-    marginBottom: 15,
-  },
-  bookImage: {
-    width: width,
-    height: 250,
-    resizeMode: 'cover',
-  },
-  overlay: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    padding: 10,
-  },
-  bookTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
+
   modalContainer: {
     flex: 1,
     justifyContent: 'center',
